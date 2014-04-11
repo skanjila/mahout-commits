@@ -1,0 +1,4 @@
+val a = dense((1,2,3),(3,4,5))
+val drmA = drmParallelize(a)
+val drmAtA = drmA.t %*% drmA
+drmAtA.collect

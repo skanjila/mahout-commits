@@ -42,12 +42,13 @@ package object sparkbindings {
    * @return
    */
   def mahoutSparkContext(masterUrl: String, appName: String,
-      customJars: TraversableOnce[String] = Nil): SparkContext = {
+      customJars: TraversableOnce[String] = Nil,
+      sparkConf: SparkConf = new SparkConf()): SparkContext = {
     val closeables = new java.util.ArrayDeque[Closeable]()
 
     try {
 
-      val conf = if (!masterUrl.startsWith("local")
+      if (!masterUrl.startsWith("local")
           || System.getProperties.contains("mahout.home")
           || System.getenv("MAHOUT_HOME") != null
       ) {
@@ -106,22 +107,29 @@ package object sparkbindings {
               j.matches(".*mahout-core-.*\\.jar") ||
               j.matches(".*mahout-spark-.*\\.jar")
         ).filter(!_.matches(".*-tests.jar")) ++
-            SparkContext.jarOfClass(classOf[DrmLike[_]]) ++ customJars
+            SparkContext.jarOfClass(classOf[DrmLike[_]])
 
         if (log.isDebugEnabled) {
           log.debug("Mahout jars:")
           mcjars.foreach(j => log.debug(j))
         }
 
-        new SparkConf().setJars(jars = mcjars.toSeq)
+        sparkConf.setJars(jars = mcjars.toSeq ++ customJars)
 
-      } else new SparkConf()
+      } else {
+        // In local mode we don't care about jars, do we?
+        sparkConf.setJars(customJars.toSeq)
+      }
 
-      conf.setAppName(appName).setMaster(masterUrl)
+      sparkConf.setAppName(appName).setMaster(masterUrl)
           .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
           .set("spark.kryo.registrator", "org.apache.mahout.sparkbindings.io.MahoutKryoRegistrator")
 
-      new SparkContext(config = conf)
+      if (System.getenv("SPARK_HOME") != null) {
+        sparkConf.setSparkHome(System.getenv("SPARK_HOME"))
+      }
+
+      new SparkContext(config = sparkConf)
 
     } finally {
       IOUtils.close(closeables)
